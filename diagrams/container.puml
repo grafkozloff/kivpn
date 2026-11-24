@@ -1,0 +1,36 @@
+@startuml kivpn-c4-container
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Контейнерная диаграмма C4 для проекта kivpn
+
+Person(user, "Частный пользователь", "Запускает приложение вручную через run.bat и взаимодействует с ним через консоль Windows.")
+
+System_Boundary(kivpn_system, "kivpn") {
+    Container(runbat, "run.bat", "Windows batch", "Скрипт ручного запуска.\nПереключает консоль в UTF-8 (chcp 65001), проверяет наличие java и target/kivpn.jar и запускает приложение.")
+
+    Container(app, "Консольное приложение", "Java 21, Spring Boot, Maven, CLI", "Интерактивное консольное приложение (target/kivpn.jar).\nОбрабатывает команды пользователя, управляет профилями и источниками серверов,\nпроверяет доступность серверов и оркестрирует подключение.")
+
+    ContainerDb(db, "SQLite WAL", "SQLite, файловая база данных", "Локальная база данных приложения.\nФайл: data/kivpn.db.\nХранит профили, источники и результаты проверок.\nИспользуется режим WAL.")
+
+    Container(config_files, "Конфигурация VPN-модуля", "Файлы конфигурации", "Конфигурация, формируемая приложением для выбранного профиля\nво временном или рабочем каталоге.")
+}
+
+System_Ext(vpn_module, "Внешний VPN-модуль", "xray / sing-box / wireguard-go.\nОпциональный внешний исполняемый модуль.\nУстанавливает сетевое соединение и направляет трафик через туннель.\nПуть к модулю задаётся пользователем.")
+
+System_Ext(sources, "Источники серверов", "Подписки, файлы, VPN Gate API, публичные списки.\nВнешние источники серверных профилей.\nОбновляются вручную по команде пользователя, с таймаутами.\nПубличные источники вспомогательные и могут быть недоступны.")
+
+System_Ext(vpn_server, "VPN-сервер пользователя", "VLESS+Reality / SS-2022 / Trojan / Hysteria2.\nПодготовленный пользователем сервер вне РФ\n(например, Oracle Cloud Always Free, панель 3x-ui).\nПорты: 443/tcp, при необходимости 443/udp.")
+
+Rel(user, runbat, "Запускает вручную", "run.bat")
+Rel(runbat, app, "Запускает исполняемый JAR", "java -jar target/kivpn.jar")
+Rel(user, app, "Вводит команды и получает результат", "Консольный ввод/вывод (stdin/stdout)")
+Rel(app, db, "Читает и сохраняет данные", "JDBC, PRAGMA journal_mode=WAL")
+Rel(app, sources, "Импортирует и обновляет профили", "HTTPS / локальные файлы, с таймаутами")
+Rel(app, vpn_server, "Проверяет доступность серверов", "Сетевые проверки, таймауты")
+Rel(app, config_files, "Формирует конфигурацию выбранного профиля")
+Rel(app, vpn_module, "Запускает и останавливает дочерний процесс", "ProcessBuilder")
+Rel(vpn_module, config_files, "Читает конфигурацию")
+Rel(vpn_module, vpn_server, "Устанавливает VPN-соединение", "443/tcp, 443/udp")
+Rel(user, vpn_server, "Готовит сервер и получает конфигурацию", "SSH, панель 3x-ui, см. README.md")
+
+@enduml

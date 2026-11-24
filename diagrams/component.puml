@@ -1,0 +1,76 @@
+@startuml kivpn-c4-component
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Компонентная диаграмма C4 Java-приложения kivpn
+
+Person(user, "Частный пользователь", "Запускает приложение и взаимодействует с ним через консоль Windows.")
+
+Container_Boundary(kivpn_app, "Консольное приложение kivpn") {
+    Component(main, "Main / Bootstrap", "Java 21, Spring Boot", "Точка входа приложения (@SpringBootApplication).\nЗапускает приложение, инициализирует ресурсы и консольный цикл,\nкорректно завершает работу и останавливает внешний VPN-модуль.")
+
+    Component(console, "Console Adapter", "stdin/stdout", "Читает команды пользователя из консоли и выводит результаты или ошибки.\nСообщения на русском языке, ошибки в stderr, секреты маскируются.")
+
+    Component(parser, "Command Parser / Router", "Java", "Разбирает пользовательский ввод и передаёт команду соответствующему обработчику.\nКоманды: help, add, import, list, check, use, update, connect, disconnect, status, export, exit.")
+
+    Component(profile_service, "Profile Service", "Java", "Управляет серверными профилями:\nдобавление, изменение, удаление, импорт и экспорт.\nХранит имя, источник, протокол, адрес, порт, ключи и статус.")
+
+    Component(profile_parser, "Profile Parser", "Java", "Разбирает текстовые представления профилей:\nvless://, ss://, trojan://, hy2:// и другие поддерживаемые форматы,\nа также файлы конфигурации. Формирует текст профиля при экспорте.")
+
+    Component(source_providers, "Source Providers", "Java, HTTP", "Отдельные провайдеры источников серверов:\nручной ввод, локальный файл, подписка по URL, VPN Gate API, публичные списки.\nИсточники включаются и отключаются, обновление выполняется вручную с таймаутами.\nОбновление не удаляет пользовательские профили без явной команды.")
+
+    Component(checker, "Server Checker", "Java, sockets", "Проверяет доступность серверов с короткими таймаутами.\nСохраняет статус, задержку, время проверки и ошибку.\nДля больших списков выполняет пакетную проверку с выводом прогресса.")
+
+    Component(selector, "Server Selector", "Java", "Выбор активного сервера: вручную по команде пользователя\nили автоматически по результатам проверки (приоритет — успешные с меньшей задержкой).\nПереключение на следующий сервер при недоступности активного.")
+
+    Component(vpn_service, "Connection Service", "Java", "Оркестрирует подключение и отключение активного профиля\n(connect, disconnect, status).\nРаботает в режиме менеджера конфигураций без внешнего VPN-модуля.")
+
+    Component(config_generator, "Config Generator", "Java", "Формирует конфигурацию для внешнего VPN-модуля\nна основе выбранного профиля во временном или рабочем каталоге.\nУчитывает DNS через туннель и обработку IPv6, если модуль это поддерживает.")
+
+    Component(process_manager, "Process Manager", "Java, ProcessBuilder", "Запускает внешний VPN-модуль как дочерний процесс,\nостанавливает его при отключении, смене профиля и выходе.\nОбрабатывает сбои модуля и не оставляет неуправляемых процессов.")
+
+    Component(repo, "Repository", "Java, JDBC", "Выполняет SQL-запросы к базе данных:\nпрофили, источники, результаты проверок, настройки.")
+
+    Component(schema, "Schema Initializer / Migrations", "Java, JDBC", "Идемпотентно создаёт каталог data, файл базы данных и схему при первом запуске.\nВерсионирует схему и выполняет миграции.")
+
+    Component(conn, "SQLite Connection Manager", "Java, JDBC", "Открывает соединения с базой данных и применяет параметры:\nPRAGMA journal_mode=WAL,\nsynchronous=NORMAL,\nforeign_keys=ON,\nbusy_timeout=5000.\nКорректно закрывает JDBC-ресурсы при завершении.")
+}
+
+ContainerDb(sqlite, "SQLite WAL", "Файловая база данных", "Локальная база данных приложения.\nФайл: data/kivpn.db.")
+
+Container(config_files, "Конфигурация VPN-модуля", "Файлы конфигурации", "Конфигурация выбранного профиля для внешнего VPN-модуля.")
+
+System_Ext(vpn_module, "Внешний VPN-модуль", "xray / sing-box / wireguard-go.\nОпциональный внешний исполняемый модуль,\nустанавливающий VPN-соединение.")
+
+System_Ext(sources, "Источники серверов", "Подписки, файлы, VPN Gate API, публичные списки.\nВнешние источники серверных профилей.")
+
+System_Ext(vpn_server, "VPN-серверы", "VLESS+Reality / SS-2022 / Trojan / Hysteria2.\nСерверы из профилей пользователя,\nв том числе подготовленный сервер в Oracle Cloud.")
+
+Rel(user, console, "Вводит команды и получает результат", "Консоль")
+Rel(main, console, "Запускает консольный цикл")
+Rel(main, schema, "Инициализирует базу данных при старте")
+Rel(console, parser, "Передаёт пользовательский ввод")
+Rel(parser, profile_service, "add, import, list, export")
+Rel(parser, source_providers, "update, включение/отключение источников")
+Rel(parser, checker, "check")
+Rel(parser, selector, "use, автовыбор")
+Rel(parser, vpn_service, "connect, disconnect, status")
+Rel(profile_service, profile_parser, "Разбирает и формирует профили")
+Rel(profile_service, repo, "Сохраняет и читает профили")
+Rel(source_providers, profile_parser, "Разбирает полученные профили")
+Rel(source_providers, repo, "Сохраняет профили и источники")
+Rel(source_providers, sources, "Загружает профили", "HTTPS / файлы, с таймаутами")
+Rel(checker, repo, "Сохраняет результаты проверок")
+Rel(checker, vpn_server, "Проверяет доступность", "Сетевые соединения, таймауты")
+Rel(selector, repo, "Читает профили и статусы проверок")
+Rel(vpn_service, selector, "Выбирает сервер и переключается при сбое")
+Rel(vpn_service, config_generator, "Готовит конфигурацию профиля")
+Rel(vpn_service, process_manager, "Запускает и останавливает модуль")
+Rel(config_generator, config_files, "Записывает конфигурацию")
+Rel(process_manager, vpn_module, "Управляет дочерним процессом", "ProcessBuilder")
+Rel(vpn_module, config_files, "Читает конфигурацию")
+Rel(vpn_module, vpn_server, "Устанавливает VPN-соединение", "443/tcp, 443/udp")
+Rel(repo, conn, "Получает JDBC-соединение")
+Rel(schema, conn, "Создаёт и мигрирует схему")
+Rel(conn, sqlite, "Читает и пишет данные", "JDBC")
+
+@enduml
