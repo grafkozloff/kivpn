@@ -46,7 +46,13 @@ public class SchemaInitializer {
                         error TEXT
                     )""",
                     "CREATE INDEX idx_profiles_source ON profiles(source_id)",
-                    "CREATE INDEX idx_checks_profile ON checks(profile_id)")));
+                    "CREATE INDEX idx_checks_profile ON checks(profile_id)")),
+            new Migration(2, List.of(
+                    """
+                    CREATE TABLE settings (
+                        key TEXT PRIMARY KEY,
+                        value TEXT NOT NULL
+                    )""")));
 
     private final SqliteConnectionManager connections;
 

@@ -70,6 +70,17 @@ public class ProfileRepository {
         }
     }
 
+    public Optional<Profile> findByUri(String uri) throws SQLException {
+        String sql = "SELECT * FROM profiles WHERE uri = ?";
+        try (Connection connection = connections.open();
+             PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, uri);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? Optional.of(map(rs)) : Optional.empty();
+            }
+        }
+    }
+
     public void update(Profile profile) throws SQLException {
         String sql = "UPDATE profiles SET source_id=?, name=?, protocol=?, address=?, port=?, uri=?, params=?, active=? "
                 + "WHERE id=?";

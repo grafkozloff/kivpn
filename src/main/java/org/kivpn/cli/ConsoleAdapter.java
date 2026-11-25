@@ -22,10 +22,6 @@ public final class ConsoleAdapter {
         this(System.in, utf8(System.out), utf8(System.err), router);
     }
 
-    public ConsoleAdapter(InputStream in, PrintStream out, PrintStream err) {
-        this(in, out, err, new CommandRouter());
-    }
-
     public ConsoleAdapter(InputStream in, PrintStream out, PrintStream err, CommandRouter router) {
         this.in = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
         this.out = out;

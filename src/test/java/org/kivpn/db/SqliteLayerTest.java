@@ -70,7 +70,7 @@ class SqliteLayerTest {
             assertEquals(1, pragma(connection, "synchronous"));
             assertEquals(1, pragma(connection, "foreign_keys"));
             assertEquals(5000, pragma(connection, "busy_timeout"));
-            assertEquals(1, pragma(connection, "user_version"));
+            assertEquals(2, pragma(connection, "user_version"));
         }
     }
 
@@ -86,7 +86,7 @@ class SqliteLayerTest {
         assertEquals(1, profiles.findAll().size());
         assertEquals(42, checks.findLatest(profileId).orElseThrow().latencyMs());
         try (Connection connection = connections.open()) {
-            assertEquals(1, pragma(connection, "user_version"));
+            assertEquals(2, pragma(connection, "user_version"));
         }
     }
 
