@@ -26,20 +26,39 @@ public final class SingBoxConfigGenerator implements ConfigGenerator {
         mixed.put("tag", "mixed-in");
         mixed.put("listen", "127.0.0.1");
         mixed.put("listen_port", 2080);
+        ObjectNode tun = inbounds.addObject();
+        tun.put("type", "tun");
+        tun.put("tag", "tun-in");
+        tun.putArray("address").add("172.19.0.1/30").add("fdfe:dcba:9876::1/126");
+        tun.put("mtu", 9000);
+        tun.put("auto_route", true);
+        tun.put("strict_route", true);
+        tun.put("stack", "system");
+        tun.put("sniff", true);
 
         ArrayNode outbounds = root.putArray("outbounds");
         outbounds.add(proxyOutbound(profile, params));
         outbounds.addObject().put("type", "direct").put("tag", "direct");
         outbounds.addObject().put("type", "block").put("tag", "block");
+        outbounds.addObject().put("type", "dns").put("tag", "dns-out");
 
         ObjectNode dns = root.putObject("dns");
         ObjectNode remote = dns.putArray("servers").addObject();
         remote.put("tag", "remote");
         remote.put("address", "https://1.1.1.1/dns-query");
         remote.put("detour", "proxy");
+        dns.put("final", "remote");
 
         ObjectNode route = root.putObject("route");
+        ArrayNode rules = route.putArray("rules");
+        ObjectNode dnsRule = rules.addObject();
+        dnsRule.put("protocol", "dns");
+        dnsRule.put("outbound", "dns-out");
+        ObjectNode privateRule = rules.addObject();
+        privateRule.put("ip_is_private", true);
+        privateRule.put("outbound", "direct");
         route.put("final", "proxy");
+        route.put("auto_detect_interface", true);
 
         return root.toPrettyString();
     }

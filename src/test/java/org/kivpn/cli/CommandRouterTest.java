@@ -31,6 +31,7 @@ import org.kivpn.source.SourceService;
 import org.kivpn.source.SubscriptionSourceProvider;
 import org.kivpn.vpn.ConfigGeneratorDispatcher;
 import org.kivpn.vpn.ConnectionService;
+import org.kivpn.vpn.FakeAdminCheck;
 import org.kivpn.vpn.FakeProcessManager;
 import org.kivpn.vpn.SingBoxConfigGenerator;
 import org.kivpn.vpn.XrayConfigGenerator;
@@ -48,9 +49,15 @@ class CommandRouterTest {
     private ConnectionService connection;
     private SourceService sources;
     private FakeProcessManager processManager;
+    private String modulePath;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
+        Path moduleDir = tempDir.resolve("sing-box");
+        Files.createDirectories(moduleDir);
+        Files.writeString(moduleDir.resolve("sing-box.exe"), "");
+        Files.writeString(moduleDir.resolve("wintun.dll"), "");
+        modulePath = moduleDir.resolve("sing-box.exe").toString();
         String dbPath = tempDir.resolve("data/kivpn.db").toString();
         SqliteConnectionManager connections = new SqliteConnectionManager(dbPath);
         new SchemaInitializer(connections).init();
@@ -68,7 +75,7 @@ class CommandRouterTest {
         ConfigGeneratorDispatcher generators =
                 new ConfigGeneratorDispatcher(java.util.List.of(new XrayConfigGenerator(), new SingBoxConfigGenerator()));
         connection = new ConnectionService(profileRepository, new SettingsRepository(connections),
-                generators, processManager, dbPath);
+                generators, processManager, new FakeAdminCheck(), dbPath);
         SubscriptionSourceProvider subscription = new SubscriptionSourceProvider(url -> LINK);
         SourceProviderDispatcher providers =
                 new SourceProviderDispatcher(java.util.List.of(subscription, new FileSourceProvider()));
@@ -291,7 +298,7 @@ class CommandRouterTest {
     void connectStartsProcess() {
         router.dispatch("add " + LINK);
         router.dispatch("use 1");
-        router.dispatch("module C:/xray/xray.exe");
+        router.dispatch("module " + modulePath);
         CommandRouter.Result result = router.dispatch("connect");
         assertNull(result.error());
         assertTrue(result.output().contains("Подключение запущено"));
@@ -299,10 +306,21 @@ class CommandRouterTest {
     }
 
     @Test
-    void disconnectStopsProcess() {
+    void connectWithXrayReportsError() {
         router.dispatch("add " + LINK);
         router.dispatch("use 1");
         router.dispatch("module C:/xray/xray.exe");
+        CommandRouter.Result result = router.dispatch("connect");
+        assertNull(result.output());
+        assertTrue(result.error().contains("sing-box"));
+        assertFalse(processManager.isRunning());
+    }
+
+    @Test
+    void disconnectStopsProcess() {
+        router.dispatch("add " + LINK);
+        router.dispatch("use 1");
+        router.dispatch("module " + modulePath);
         router.dispatch("connect");
         CommandRouter.Result result = router.dispatch("disconnect");
         assertNull(result.error());

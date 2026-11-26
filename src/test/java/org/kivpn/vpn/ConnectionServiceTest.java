@@ -25,19 +25,27 @@ class ConnectionServiceTest {
     private ProfileRepository profiles;
     private SettingsRepository settings;
     private FakeProcessManager processManager;
+    private FakeAdminCheck adminCheck;
     private ConnectionService service;
+    private String modulePath;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         String dbPath = tempDir.resolve("data/kivpn.db").toString();
         SqliteConnectionManager connections = new SqliteConnectionManager(dbPath);
         new SchemaInitializer(connections).init();
         profiles = new ProfileRepository(connections);
         settings = new SettingsRepository(connections);
         processManager = new FakeProcessManager();
+        adminCheck = new FakeAdminCheck();
         ConfigGeneratorDispatcher generators =
                 new ConfigGeneratorDispatcher(List.of(new XrayConfigGenerator(), new SingBoxConfigGenerator()));
-        service = new ConnectionService(profiles, settings, generators, processManager, dbPath);
+        service = new ConnectionService(profiles, settings, generators, processManager, adminCheck, dbPath);
+        Path moduleDir = tempDir.resolve("sing-box");
+        Files.createDirectories(moduleDir);
+        Files.writeString(moduleDir.resolve("sing-box.exe"), "");
+        Files.writeString(moduleDir.resolve("wintun.dll"), "");
+        modulePath = moduleDir.resolve("sing-box.exe").toString();
     }
 
     private long addActiveProfile() throws Exception {
@@ -63,20 +71,56 @@ class ConnectionServiceTest {
     @Test
     void connectStartsProcessAndWritesConfig() throws Exception {
         addActiveProfile();
-        settings.set(ConnectionService.MODULE_PATH, "C:/xray/xray.exe");
+        settings.set(ConnectionService.MODULE_PATH, modulePath);
+        settings.set(ConnectionService.MODULE_TYPE, "sing-box");
         String message = service.connect();
         assertTrue(message.contains("Подключение запущено"));
+        assertTrue(message.contains("TUN"));
         assertTrue(processManager.isRunning());
-        assertEquals("C:/xray/xray.exe", processManager.lastCommand().get(0));
+        assertEquals(modulePath, processManager.lastCommand().get(0));
         assertTrue(processManager.lastCommand().contains("run"));
         assertTrue(Files.exists(tempDir.resolve("data/module-config.json")));
         assertTrue(service.status().contains("подключено"));
+        assertTrue(service.status().contains("полный туннель"));
+    }
+
+    @Test
+    void connectWithXrayModuleThrows() throws Exception {
+        addActiveProfile();
+        settings.set(ConnectionService.MODULE_PATH, "C:/xray/xray.exe");
+        settings.set(ConnectionService.MODULE_TYPE, "xray");
+        ConnectionException e = assertThrows(ConnectionException.class, () -> service.connect());
+        assertTrue(e.getMessage().contains("sing-box"));
+        assertFalse(processManager.isRunning());
+    }
+
+    @Test
+    void connectWithoutAdminThrows() throws Exception {
+        addActiveProfile();
+        settings.set(ConnectionService.MODULE_PATH, modulePath);
+        settings.set(ConnectionService.MODULE_TYPE, "sing-box");
+        adminCheck.setAdmin(false);
+        ConnectionException e = assertThrows(ConnectionException.class, () -> service.connect());
+        assertTrue(e.getMessage().contains("администратора"));
+        assertFalse(processManager.isRunning());
+    }
+
+    @Test
+    void connectWithoutWintunThrows() throws Exception {
+        addActiveProfile();
+        settings.set(ConnectionService.MODULE_PATH, modulePath);
+        settings.set(ConnectionService.MODULE_TYPE, "sing-box");
+        Files.delete(tempDir.resolve("sing-box/wintun.dll"));
+        ConnectionException e = assertThrows(ConnectionException.class, () -> service.connect());
+        assertTrue(e.getMessage().contains("wintun.dll"));
+        assertFalse(processManager.isRunning());
     }
 
     @Test
     void connectTwiceThrows() throws Exception {
         addActiveProfile();
-        settings.set(ConnectionService.MODULE_PATH, "C:/xray/xray.exe");
+        settings.set(ConnectionService.MODULE_PATH, modulePath);
+        settings.set(ConnectionService.MODULE_TYPE, "sing-box");
         service.connect();
         ConnectionException e = assertThrows(ConnectionException.class, () -> service.connect());
         assertTrue(e.getMessage().contains("уже активно"));
@@ -85,7 +129,8 @@ class ConnectionServiceTest {
     @Test
     void disconnectStopsProcess() throws Exception {
         addActiveProfile();
-        settings.set(ConnectionService.MODULE_PATH, "C:/xray/xray.exe");
+        settings.set(ConnectionService.MODULE_PATH, modulePath);
+        settings.set(ConnectionService.MODULE_TYPE, "sing-box");
         service.connect();
         String message = service.disconnect();
         assertEquals("Подключение остановлено.", message);
@@ -126,7 +171,8 @@ class ConnectionServiceTest {
     @Test
     void onProfileSwitchStopsWhenDifferent() throws Exception {
         long id = addActiveProfile();
-        settings.set(ConnectionService.MODULE_PATH, "C:/xray/xray.exe");
+        settings.set(ConnectionService.MODULE_PATH, modulePath);
+        settings.set(ConnectionService.MODULE_TYPE, "sing-box");
         service.connect();
         service.onProfileSwitch(id + 1);
         assertFalse(processManager.isRunning());
@@ -135,7 +181,8 @@ class ConnectionServiceTest {
     @Test
     void onProfileSwitchKeepsWhenSame() throws Exception {
         long id = addActiveProfile();
-        settings.set(ConnectionService.MODULE_PATH, "C:/xray/xray.exe");
+        settings.set(ConnectionService.MODULE_PATH, modulePath);
+        settings.set(ConnectionService.MODULE_TYPE, "sing-box");
         service.connect();
         service.onProfileSwitch(id);
         assertTrue(processManager.isRunning());

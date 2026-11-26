@@ -29,6 +29,7 @@ import org.kivpn.source.SourceService;
 import org.kivpn.source.SubscriptionSourceProvider;
 import org.kivpn.vpn.ConfigGeneratorDispatcher;
 import org.kivpn.vpn.ConnectionService;
+import org.kivpn.vpn.FakeAdminCheck;
 import org.kivpn.vpn.FakeProcessManager;
 import org.kivpn.vpn.SingBoxConfigGenerator;
 import org.kivpn.vpn.XrayConfigGenerator;
@@ -55,7 +56,7 @@ class ConsoleAdapterTest {
         ConfigGeneratorDispatcher generators =
                 new ConfigGeneratorDispatcher(java.util.List.of(new XrayConfigGenerator(), new SingBoxConfigGenerator()));
         ConnectionService connection = new ConnectionService(profileRepository, new SettingsRepository(connections),
-                generators, new FakeProcessManager(), dbPath);
+                generators, new FakeProcessManager(), new FakeAdminCheck(), dbPath);
         SourceProviderDispatcher providers = new SourceProviderDispatcher(
                 java.util.List.of(new SubscriptionSourceProvider(url -> ""), new FileSourceProvider()));
         SourceService sources = new SourceService(new SourceRepository(connections), profileRepository, providers, dispatcher);

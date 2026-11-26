@@ -86,6 +86,36 @@ class SingBoxConfigGeneratorTest {
     }
 
     @Test
+    void tunInboundRoutesAllTraffic() throws Exception {
+        Profile profile = new VlessParser().parse("vless://" + UUID + "@example.com:443#R");
+        JsonNode root = JSON.readTree(generator.generate(profile));
+
+        JsonNode tun = root.get("inbounds").get(1);
+        assertEquals("tun", tun.get("type").asText());
+        assertTrue(tun.get("auto_route").asBoolean());
+        assertTrue(tun.get("strict_route").asBoolean());
+        assertTrue(tun.get("sniff").asBoolean());
+        assertEquals(2, tun.get("address").size());
+        assertTrue(tun.get("address").get(1).asText().contains(":"));
+
+        assertTrue(root.get("route").get("auto_detect_interface").asBoolean());
+        JsonNode dnsRule = root.get("route").get("rules").get(0);
+        assertEquals("dns", dnsRule.get("protocol").asText());
+        assertEquals("dns-out", dnsRule.get("outbound").asText());
+        assertTrue(root.get("route").get("rules").get(1).get("ip_is_private").asBoolean());
+
+        boolean hasDnsOut = false;
+        for (JsonNode out : root.get("outbounds")) {
+            if ("dns-out".equals(out.path("tag").asText())) {
+                hasDnsOut = true;
+            }
+        }
+        assertTrue(hasDnsOut);
+        assertEquals("remote", root.get("dns").get("final").asText());
+        assertEquals("proxy", root.get("dns").get("servers").get(0).get("detour").asText());
+    }
+
+    @Test
     void unsupportedProtocolThrows() {
         Profile profile = new Profile(1L, null, "X", "wireguard", "example.com", 51820, "wireguard://x", "{}", false);
         assertThrows(IllegalArgumentException.class, () -> generator.generate(profile));
